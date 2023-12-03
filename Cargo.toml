@@ -1,0 +1,20 @@
+[package]
+name = "checkalot"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "checkalot"
+path = "src/checkalot.rs"
+
+[[bin]]
+name = "cargo-checkalot"
+path = "src/cargo-checkalot.rs"
+
+[dependencies]
+anyhow = "1.0.75"
+clap = { version = "4.4.10", features = ["derive"] }
+colored = "2.0.4"
+duct = "0.13.6"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_yaml = "0.9.27"
