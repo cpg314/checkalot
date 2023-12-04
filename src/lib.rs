@@ -73,7 +73,7 @@ impl Check {
                         .stdout,
                 )?;
                 anyhow::ensure!(
-                    common_ancestor.trim() == head,
+                    common_ancestor.trim() == origin,
                     "The commit {} is not rebased on origin/master ({})",
                     head,
                     origin
