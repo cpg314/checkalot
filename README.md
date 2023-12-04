@@ -11,29 +11,33 @@ This lightweight binary runs a configurable series of commands that can perform 
 Usage: checkalot [OPTIONS] [REPOSITORY]
 
 Arguments:
-  [REPOSITORY]  [default: current directory]
+  [REPOSITORY]  [default: deduced from current directory]
 
 Options:
       --fix   Tries to fix errors
   -h, --help  Print help
 ```
 
-The repository should contain a `checkalot.yaml` configuration file; an example can be found at the root of the repository.
+The repository should contain a `checkalot.yaml` configuration file at its root; an example can be found at the root of the repository.
 
 ```yaml
 checks:
+  # Built-in command
   - type: git-is-clean
+  # Built-in command
   - type: git-is-rebased
+  # Custom command
   - type: command
+    # Name, only for display
     name: group-imports
     command: cargo group-imports
+    # Folder relative to the repository where to excute the command
     folder: rust
+    # Optional command for --fix flag
     fix_command: cargo group-imports --fix
 ```
 
-There are two built-in commands: `git-is-clean` and `git-is-rebased`.
-
-When the `--fix` command is provided the `fix_command` command of eached failed check is called, before re-executing the check.
+When the `--fix` command is provided the `fix_command` command of each failed check is called, before re-executing the check.
 
 ## Installation
 
