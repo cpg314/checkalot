@@ -9,12 +9,6 @@ checks:
     fix_command: cargo group-imports --fix
 
   - type: command
-    name: machete
-    command: cargo-machete
-    folder: rust
-    fix_command: cargo-machete --fix
-
-  - type: command
     name: hakari
     command: cargo hakari generate --diff
     folder: rust
@@ -25,6 +19,12 @@ checks:
     command: cargo hakari manage-deps --dry-run
     folder: rust
     fix_command: cargo hakari manage-deps
+
+  - type: command
+    name: machete
+    command: cargo-machete
+    folder: rust
+    fix_command: cargo-machete --fix
 
   - type: command
     name: deny
