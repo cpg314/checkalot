@@ -1,14 +1,29 @@
+use std::io::Write;
 use std::path::PathBuf;
 
+use anyhow::Context;
 use clap::Parser;
 use colored::Colorize;
 
 use crate::*;
 
+fn find_repository() -> anyhow::Result<PathBuf> {
+    let mut path = std::env::current_dir()?;
+    loop {
+        if path.join(".git").exists() {
+            return Ok(path);
+        }
+        path = path
+            .parent()
+            .context("Failed to find repository root. Use the --repository option.")?
+            .into();
+    }
+}
+
 #[derive(Parser)]
 pub struct Flags {
-    #[clap(default_value_os_t = std::env::current_dir().unwrap())]
-    repository: PathBuf,
+    /// Repository root. If not provided, deduced from the current directory.
+    repository: Option<PathBuf>,
     /// Tries to fix errors
     #[clap(long)]
     fix: bool,
@@ -22,12 +37,20 @@ pub fn main(args: Flags) -> anyhow::Result<()> {
 }
 fn main_impl(args: Flags) -> anyhow::Result<()> {
     println!("{} {}", "checkalot".blue(), env!("CARGO_PKG_VERSION"));
+    let mut stdout = std::io::stdout();
 
-    let config = Config::load(&args.repository)?;
+    let repository = if let Some(repository) = args.repository {
+        repository
+    } else {
+        find_repository()?
+    };
+
+    let config = Config::load(&repository)?;
 
     let n_checks = config.checks.len();
     let start = std::time::Instant::now();
-    println!("Executing {} checks in {:?}", n_checks, args.repository);
+
+    println!("Executing {} checks in {:?}", n_checks, repository);
 
     for (i, check) in config.checks.iter().enumerate() {
         let start_check = std::time::Instant::now();
@@ -38,14 +61,16 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
             n_checks,
             check.name()
         );
+        stdout.flush()?;
 
-        let mut result = check.execute(&args.repository, false);
+        let mut result = check.execute(&repository, false);
         if result.is_err() && args.fix {
             print!("{}", "Trying to fix ".yellow());
-            check.execute(&args.repository, true)?;
+            stdout.flush()?;
+            check.execute(&repository, true)?;
             // We run the check again, but this may not be necessary depending whether a success
             // of the fix command implies a success of the check command.
-            result = check.execute(&args.repository, false);
+            result = check.execute(&repository, false);
         }
 
         if let Err(e) = result {
