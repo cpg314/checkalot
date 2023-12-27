@@ -5,7 +5,35 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
+#[serde(untagged)]
+pub enum CommandSpec {
+    Simple(String),
+    Complex {
+        command: String,
+        success_statuses: Vec<i32>,
+    },
+}
+impl CommandSpec {
+    fn command(&self) -> &String {
+        match self {
+            CommandSpec::Simple(command) => command,
+            CommandSpec::Complex { command, .. } => command,
+        }
+    }
+    fn success_statuses(&self) -> &[i32] {
+        match self {
+            CommandSpec::Simple(_) => &[0],
+            CommandSpec::Complex {
+                success_statuses: ok_returns,
+                ..
+            } => ok_returns,
+        }
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug)]
 #[serde(rename_all = "lowercase", tag = "type")]
+#[allow(clippy::large_enum_variant)]
 pub enum Check {
     Version {
         version: semver::VersionReq,
@@ -19,27 +47,32 @@ pub enum Check {
     Command {
         name: String,
         /// Command to execute; a status code of 0 denotes success.
-        command: String,
+        command: CommandSpec,
         /// Command to attempt to fix failures.
-        fix_command: Option<String>,
+        fix_command: Option<CommandSpec>,
         /// Directory where the command should be executed. Repository root if left empty.
         folder: Option<PathBuf>,
         /// Command that produces a version number to be checked against `version`.
-        version_command: Option<String>,
+        version_command: Option<CommandSpec>,
         /// Semver requirement on the tool.
         version: Option<semver::VersionReq>,
     },
 }
 
-fn run_command(command: &str, dir: &Path) -> anyhow::Result<std::process::Output> {
-    let command: Vec<&str> = command.split(' ').collect();
+fn run_command(command_spec: &CommandSpec, dir: &Path) -> anyhow::Result<std::process::Output> {
+    let command: Vec<&str> = command_spec.command().split(' ').collect();
     run_expr(
         command[0],
         duct::cmd(command[0], command.into_iter().skip(1)).dir(dir),
+        command_spec.success_statuses(),
     )
 }
 
-fn run_expr(command: &str, expr: duct::Expression) -> anyhow::Result<std::process::Output> {
+fn run_expr(
+    command: &str,
+    expr: duct::Expression,
+    success_statuses: &[i32],
+) -> anyhow::Result<std::process::Output> {
     let out = expr
         .stderr_to_stdout()
         .stdout_capture()
@@ -56,9 +89,14 @@ fn run_expr(command: &str, expr: duct::Expression) -> anyhow::Result<std::proces
         _ => {}
     }
     let out = out?;
-    if !out.status.success() {
-        let stdout = String::from_utf8(out.stdout)?;
-        anyhow::bail!(stdout);
+    match out.status.code() {
+        Some(code) => {
+            if !success_statuses.contains(&code) {
+                let stdout = String::from_utf8(out.stdout)?;
+                anyhow::bail!(stdout);
+            }
+        }
+        None => anyhow::bail!("Process was terminated by a signal"),
     }
     Ok(out)
 }
@@ -90,6 +128,7 @@ impl Check {
                 let cmd = run_expr(
                     "git",
                     duct::cmd!("git", "status", "--porcelain", "-uno").dir(repository),
+                    &[0],
                 )?;
                 let stdout = String::from_utf8(cmd.stdout)?;
                 if !stdout.is_empty() {
@@ -99,11 +138,15 @@ impl Check {
             }
             Check::GitRebased => {
                 anyhow::ensure!(!fix, "No automatic fix available");
-                run_expr("git", duct::cmd!("git", "fetch").dir(repository))?;
+                run_expr("git", duct::cmd!("git", "fetch").dir(repository), &[0])?;
                 let rev_parse = |rev: &str| -> anyhow::Result<String> {
                     Ok(String::from_utf8(
-                        run_expr("git", duct::cmd!("git", "rev-parse", rev).dir(repository))?
-                            .stdout,
+                        run_expr(
+                            "git",
+                            duct::cmd!("git", "rev-parse", rev).dir(repository),
+                            &[0],
+                        )?
+                        .stdout,
                     )?
                     .trim()
                     .to_owned())
@@ -114,6 +157,7 @@ impl Check {
                     run_expr(
                         "git",
                         duct::cmd!("git", "merge-base", &origin, &head).dir(repository),
+                        &[0],
                     )?
                     .stdout,
                 )?;

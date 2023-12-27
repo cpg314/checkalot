@@ -32,7 +32,11 @@ checks:
     name: machete
     command: cargo-machete
     folder: rust
-    fix_command: cargo-machete --fix
+    fix_command:
+      command: cargo-machete --fix
+      success_statuses:
+        - 0
+        - 1
 
   - type: command
     name: deny
