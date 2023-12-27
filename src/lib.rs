@@ -24,13 +24,23 @@ pub enum Check {
     },
 }
 
-fn run_expr(expr: duct::Expression) -> anyhow::Result<std::process::Output> {
+fn run_expr(command: &str, expr: duct::Expression) -> anyhow::Result<std::process::Output> {
     let out = expr
         .stderr_to_stdout()
         .stdout_capture()
         .stderr_capture()
         .unchecked()
-        .run()?;
+        .run();
+    match &out {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!(
+                "Executable `{}` not found. Is it installed and present in the PATH?",
+                command
+            );
+        }
+        _ => {}
+    }
+    let out = out?;
     if !out.status.success() {
         let stdout = String::from_utf8(out.stdout)?;
         anyhow::bail!(stdout);
@@ -49,8 +59,10 @@ impl Check {
         match self {
             Check::GitClean => {
                 anyhow::ensure!(!fix, "No automatic fix available");
-                let cmd =
-                    run_expr(duct::cmd!("git", "status", "--porcelain", "-uno").dir(repository))?;
+                let cmd = run_expr(
+                    "git",
+                    duct::cmd!("git", "status", "--porcelain", "-uno").dir(repository),
+                )?;
                 let stdout = String::from_utf8(cmd.stdout)?;
                 if !stdout.is_empty() {
                     anyhow::bail!("Repository is dirty:\n{}", stdout);
@@ -59,10 +71,11 @@ impl Check {
             }
             Check::GitRebased => {
                 anyhow::ensure!(!fix, "No automatic fix available");
-                run_expr(duct::cmd!("git", "fetch").dir(repository))?;
+                run_expr("git", duct::cmd!("git", "fetch").dir(repository))?;
                 let rev_parse = |rev: &str| -> anyhow::Result<String> {
                     Ok(String::from_utf8(
-                        run_expr(duct::cmd!("git", "rev-parse", rev).dir(repository))?.stdout,
+                        run_expr("git", duct::cmd!("git", "rev-parse", rev).dir(repository))?
+                            .stdout,
                     )?
                     .trim()
                     .to_owned())
@@ -70,8 +83,11 @@ impl Check {
                 let origin = rev_parse("origin/master")?;
                 let head = rev_parse("HEAD")?;
                 let common_ancestor = String::from_utf8(
-                    run_expr(duct::cmd!("git", "merge-base", &origin, &head).dir(repository))?
-                        .stdout,
+                    run_expr(
+                        "git",
+                        duct::cmd!("git", "merge-base", &origin, &head).dir(repository),
+                    )?
+                    .stdout,
                 )?;
                 anyhow::ensure!(
                     common_ancestor.trim() == origin,
@@ -100,7 +116,11 @@ impl Check {
                 if let Some(folder) = folder {
                     dir = dir.join(folder);
                 }
-                run_expr(duct::cmd(command[0], command.into_iter().skip(1)).dir(dir))?;
+                anyhow::ensure!(dir.exists(), "Execution folder {:?} does not exist", dir);
+                run_expr(
+                    command[0],
+                    duct::cmd(command[0], command.into_iter().skip(1)).dir(dir),
+                )?;
                 Ok(())
             }
         }
