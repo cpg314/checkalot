@@ -47,6 +47,14 @@ $ cargo install --git https://github.com/cpg314/checkalot --tag v0.1.1
 
 This will install both `checkalot` and `cargo-checkalot`, the latter being usable as a cargo subcommand (`cargo checkalot`).
 
+If emojis do not show properly, install a failback font such as [Noto Emoji](https://github.com/googlefonts/noto-emoji). For example, on Arch/Manjaro with wezterm:
+
+```console
+$ sudo pacman -S noto-fonts-emoji
+$ rg font ~/.wezterm.lua
+font = wezterm.font_with_fallback({"JetBrains Mono", "Noto Emoji"})
+```
+
 ## See also
 
 - https://crates.io/crates/cargo-checkmate
