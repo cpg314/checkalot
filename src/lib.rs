@@ -228,8 +228,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(repository: &Path) -> anyhow::Result<Self> {
-        let path = repository.join("checkalot.yaml");
+    pub fn load(path: &Path) -> anyhow::Result<Self> {
         let config = std::fs::read_to_string(&path)
             .with_context(|| format!("Failed to open configuration at {:?}", path))?;
 

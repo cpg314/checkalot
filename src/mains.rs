@@ -24,6 +24,9 @@ fn find_repository() -> anyhow::Result<PathBuf> {
 pub struct Flags {
     /// Repository root. If not provided, deduced from the current directory.
     repository: Option<PathBuf>,
+    /// Configuration path relative to repository root
+    #[clap(default_value = "checkalot.yaml")]
+    config: PathBuf,
     /// Tries to fix errors
     #[clap(long)]
     fix: bool,
@@ -44,7 +47,7 @@ fn run_checks(args: &Flags) -> anyhow::Result<bool> {
         find_repository()?
     };
 
-    let config = Config::load(&repository)?;
+    let config = Config::load(&repository.join(&args.config))?;
     let n_checks = config.checks.len();
     let start = std::time::Instant::now();
 
