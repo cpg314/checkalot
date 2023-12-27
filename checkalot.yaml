@@ -1,4 +1,7 @@
 checks:
+  - type: version
+    version: ">=0.1.1"
+
   - type: git-is-clean
   - type: git-is-rebased
 
@@ -6,18 +9,23 @@ checks:
     name: group-imports
     command: cargo group-imports
     folder: rust
+    version: ">=0.1.2"
+    version_command: cargo group-imports --version
     fix_command: cargo group-imports --fix
 
   - type: command
     name: hakari
     command: cargo hakari generate --diff
-    folder: rust
+    version: ">=0.9"
+    version_command: cargo hakari --version
     fix_command: cargo hakari generate
 
   - type: command
     name: hakari-deps
     command: cargo hakari manage-deps --dry-run
     folder: rust
+    version: ">=0.9"
+    version_command: cargo hakari --version
     fix_command: cargo hakari manage-deps
 
   - type: command
@@ -30,6 +38,8 @@ checks:
     name: deny
     command: cargo deny --offline check licenses bans sources --hide-inclusion-graph
     folder: rust
+    version: ">=0.14"
+    version_command: cargo deny --version
 
   - type: command
     name: fmt
@@ -47,3 +57,5 @@ checks:
     name: prettier
     command: prettier --check docs
     fix_command: prettier docs
+    version: ">=3.1.1"
+    version_command: prettier --version

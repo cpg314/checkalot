@@ -21,6 +21,9 @@ The repository should contain a `checkalot.yaml` configuration file at its root.
 
 ```yaml
 checks:
+  # Built-in command (self version check)
+  - type: version
+    version: ">=0.1.2"
   # Built-in command
   - type: git-is-clean
   # Built-in command
@@ -34,6 +37,9 @@ checks:
     folder: rust
     # Optional command for --fix flag
     fix_command: cargo group-imports --fix
+    # Optional version check
+    version: ">=0.1.2"
+    version_command: cargo group-imports --version
 ```
 
 A more complete example can be found at the root of the repository.
@@ -79,3 +85,7 @@ font = wezterm.font_with_fallback({"JetBrains Mono", "Noto Emoji"})
   - https://crates.io/crates/cargo-hakari
   - https://prettier.io/
   - https://github.com/cpg314/cargo-group-imports
+
+## TODOs
+
+- Type the errors (instead of `anyhow`), so that we can distinguish stdout/stderr in commands from other errors.

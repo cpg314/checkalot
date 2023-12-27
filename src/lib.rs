@@ -7,6 +7,9 @@ use anyhow::Context;
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum Check {
+    Version {
+        version: semver::VersionReq,
+    },
     /// Checks if the repository is clean. Untracked files are ignored.
     #[serde(rename = "git-is-clean")]
     GitClean,
@@ -21,7 +24,19 @@ pub enum Check {
         fix_command: Option<String>,
         /// Directory where the command should be executed. Repository root if left empty.
         folder: Option<PathBuf>,
+        /// Command that produces a version number to be checked against `version`.
+        version_command: Option<String>,
+        /// Semver requirement on the tool.
+        version: Option<semver::VersionReq>,
     },
+}
+
+fn run_command(command: &str, dir: &Path) -> anyhow::Result<std::process::Output> {
+    let command: Vec<&str> = command.split(' ').collect();
+    run_expr(
+        command[0],
+        duct::cmd(command[0], command.into_iter().skip(1)).dir(dir),
+    )
 }
 
 fn run_expr(command: &str, expr: duct::Expression) -> anyhow::Result<std::process::Output> {
@@ -50,6 +65,7 @@ fn run_expr(command: &str, expr: duct::Expression) -> anyhow::Result<std::proces
 impl Check {
     pub fn name(&self) -> &str {
         match self {
+            Check::Version { .. } => "version",
             Check::GitClean => "git-is-clean",
             Check::GitRebased => "git-is-rebased",
             Check::Command { name, .. } => name,
@@ -57,6 +73,18 @@ impl Check {
     }
     pub fn execute(&self, repository: &Path, fix: bool) -> anyhow::Result<()> {
         match self {
+            Check::Version {
+                version: version_req,
+            } => {
+                let version = &semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+                anyhow::ensure!(
+                    version_req.matches(version),
+                    "Version {} does not meet requirement {}",
+                    version,
+                    version_req
+                );
+                Ok(())
+            }
             Check::GitClean => {
                 anyhow::ensure!(!fix, "No automatic fix available");
                 let cmd = run_expr(
@@ -102,8 +130,39 @@ impl Check {
                 command,
                 folder,
                 fix_command,
-                ..
+                version,
+                version_command,
+                name,
             } => {
+                let mut dir = repository.to_owned();
+                if let Some(folder) = folder {
+                    dir = dir.join(folder);
+                }
+                anyhow::ensure!(dir.exists(), "Execution folder {:?} does not exist", dir);
+                match (version, version_command) {
+                    (Some(_), None) => {
+                        anyhow::bail!("A `version_command` is required to check against `version`")
+                    }
+                    (Some(version_req), Some(version_command)) => {
+                        // Check version
+                        let out = run_command(version_command, &dir)?.stdout;
+                        let out = String::from_utf8(out)?;
+                        let version = out
+                            .trim()
+                            .split(' ')
+                            .find_map(|s| semver::Version::parse(s).ok())
+                            .with_context(|| format!("Failed to find a version in {}", out))?;
+                        anyhow::ensure!(
+                            version_req.matches(&version),
+                            "Version {} of {} does not match requirement {}",
+                            version,
+                            name,
+                            version_req
+                        );
+                    }
+                    _ => {}
+                }
+
                 let command = if fix {
                     fix_command.as_ref().with_context(|| {
                         format!("No automatic fix available for {}", self.name())
@@ -111,16 +170,7 @@ impl Check {
                 } else {
                     command
                 };
-                let command: Vec<&str> = command.split(' ').collect();
-                let mut dir = repository.to_owned();
-                if let Some(folder) = folder {
-                    dir = dir.join(folder);
-                }
-                anyhow::ensure!(dir.exists(), "Execution folder {:?} does not exist", dir);
-                run_expr(
-                    command[0],
-                    duct::cmd(command[0], command.into_iter().skip(1)).dir(dir),
-                )?;
+                run_command(command, &dir)?;
                 Ok(())
             }
         }
