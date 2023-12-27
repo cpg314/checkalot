@@ -35,18 +35,15 @@ pub fn main(args: Flags) -> anyhow::Result<()> {
     }
     Ok(())
 }
-fn main_impl(args: Flags) -> anyhow::Result<()> {
-    println!("{} {}", "checkalot".blue(), env!("CARGO_PKG_VERSION"));
+fn run_checks(args: &Flags) -> anyhow::Result<()> {
     let mut stdout = std::io::stdout();
-
-    let repository = if let Some(repository) = args.repository {
+    let repository = if let Some(repository) = args.repository.clone() {
         repository
     } else {
         find_repository()?
     };
 
     let config = Config::load(&repository)?;
-
     let n_checks = config.checks.len();
     let start = std::time::Instant::now();
 
@@ -55,19 +52,18 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
     for (i, check) in config.checks.iter().enumerate() {
         let start_check = std::time::Instant::now();
 
-        print!(
-            "[{:>2}/{}] Executing {:<20} ",
-            i + 1,
-            n_checks,
-            check.name()
-        );
+        let header = format!("[{:>2}/{}] ", i + 1, n_checks);
+        print!("{}Executing {:<20} ", header, check.name());
         stdout.flush()?;
 
         let mut result = check.execute(&repository, false);
         if result.is_err() && args.fix {
             print!("{}", "Trying to fix ".yellow());
             stdout.flush()?;
-            check.execute(&repository, true)?;
+            if let Err(e) = check.execute(&repository, true) {
+                println!("{}", e);
+                anyhow::bail!("Fixing {} failed", check.name());
+            }
             // We run the check again, but this may not be necessary depending whether a success
             // of the fix command implies a success of the check command.
             result = check.execute(&repository, false);
@@ -75,7 +71,7 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
 
         if let Err(e) = result {
             println!("❌ {:.2} s", start_check.elapsed().as_secs_f32());
-            println!("{:?}", e);
+            println!("{}", e);
             anyhow::bail!("The check '{}' has failed", check.name());
         }
         println!("✅ {:.2} s", start_check.elapsed().as_secs_f32());
@@ -85,5 +81,17 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
         n_checks,
         start.elapsed().as_secs_f32()
     );
+    Ok(())
+}
+fn main_impl(mut args: Flags) -> anyhow::Result<()> {
+    println!("{} {}", "checkalot".blue(), env!("CARGO_PKG_VERSION"));
+
+    run_checks(&args)?;
+
+    if args.fix {
+        println!("Running all checks again to ensure that fixes were successful.",);
+        args.fix = false;
+        run_checks(&args)?;
+    }
     Ok(())
 }

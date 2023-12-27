@@ -3,7 +3,6 @@
 This lightweight binary runs a configurable series of commands that can perform checks on a repository, such as linting or formatting. Automatic fixing can be attempted for commands that support it.
 
 ![Screenshot](screenshot.png)
-![Screenshot](fix.png)
 
 ## Usage
 
@@ -37,7 +36,13 @@ checks:
     fix_command: cargo group-imports --fix
 ```
 
-When the `--fix` command is provided the `fix_command` command of each failed check is called, before re-executing the check.
+### Fixing issues automatically
+
+When the `--fix` command is provided the `fix_command` command of each failed check is called.
+
+All checks are then rerun in order. This is important, as fixes from one command can invalidate another (e.g. `hakari` adding dependencies that are then falsely marked as unused by `machete`).
+
+![Screenshot](fix.png)
 
 ## Installation
 
