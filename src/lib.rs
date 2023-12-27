@@ -59,6 +59,7 @@ impl Check {
             }
             Check::GitRebased => {
                 anyhow::ensure!(!fix, "No automatic fix available");
+                run_expr(duct::cmd!("git", "fetch").dir(repository))?;
                 let rev_parse = |rev: &str| -> anyhow::Result<String> {
                     Ok(String::from_utf8(
                         run_expr(duct::cmd!("git", "rev-parse", rev).dir(repository))?.stdout,
