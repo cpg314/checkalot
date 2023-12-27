@@ -17,7 +17,7 @@ Options:
   -h, --help  Print help
 ```
 
-The repository should contain a `checkalot.yaml` configuration file at its root; an example can be found at the root of the repository.
+The repository should contain a `checkalot.yaml` configuration file at its root.
 
 ```yaml
 checks:
@@ -36,6 +36,8 @@ checks:
     fix_command: cargo group-imports --fix
 ```
 
+A more complete example can be found at the root of the repository.
+
 ### Fixing issues automatically
 
 When the `--fix` command is provided the `fix_command` command of each failed check is called.
@@ -44,6 +46,12 @@ All checks are then rerun in order. This is important, as fixes from one command
 
 ![Screenshot](fix.png)
 
+### Avoiding rebuilds
+
+If you execute `clippy` outside of `checkalot`, make sure it is run with exactly the same arguments, to avoid recompilations between invocations from different locations. This includes for example the `-D warnings` parameter.
+
+If needed, set `CARGO_LOG=cargo::core::compiler::fingerprint=info` to understand why `clippy` thinks a file is stale.
+
 ## Installation
 
 ```
@@ -51,6 +59,8 @@ $ cargo install --git https://github.com/cpg314/checkalot --tag v0.1.1
 ```
 
 This will install both `checkalot` and `cargo-checkalot`, the latter being usable as a cargo subcommand (`cargo checkalot`).
+
+### Emojis
 
 If emojis do not show properly, install a failback font such as [Noto Emoji](https://github.com/googlefonts/noto-emoji). For example, on Arch/Manjaro with wezterm:
 
