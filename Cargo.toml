@@ -19,3 +19,4 @@ duct = "0.13.6"
 semver = { version = "1.0.20", features = ["serde"] }
 serde = { version = "1.0.193", features = ["derive"] }
 serde_yaml = "0.9.27"
+thiserror = "1.0.52"

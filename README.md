@@ -40,6 +40,8 @@ checks:
     # Optional version check
     version: ">=0.1.2"
     version_command: cargo group-imports --version
+    # Optional output path
+    output: /tmp/group-imports.txt
 ```
 
 A more complete example can be found at the root of the repository.

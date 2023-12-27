@@ -56,10 +56,25 @@ pub enum Check {
         version_command: Option<CommandSpec>,
         /// Semver requirement on the tool.
         version: Option<semver::VersionReq>,
+        /// Save stderr and stdout at this location, overwriting if the file exists.
+        output: Option<PathBuf>,
     },
 }
+#[derive(thiserror::Error, Debug)]
+enum RunCommandError {
+    #[error("Executable `{0}` not found. Is it installed and present in the PATH?")]
+    NotFound(String),
+    #[error("Command terminated with a failure status code {code}")]
+    StatusCode { output: String, code: i32 },
+    #[error("Command was terminated by a signal")]
+    Signal,
+    #[error("Command produced non-UTF-8 output")]
+    Utf8,
+    #[error("Other execution error: {0}")]
+    Other(std::io::Error),
+}
 
-fn run_command(command_spec: &CommandSpec, dir: &Path) -> anyhow::Result<std::process::Output> {
+fn run_command(command_spec: &CommandSpec, dir: &Path) -> Result<String, RunCommandError> {
     let command: Vec<&str> = command_spec.command().split(' ').collect();
     run_expr(
         command[0],
@@ -72,7 +87,7 @@ fn run_expr(
     command: &str,
     expr: duct::Expression,
     success_statuses: &[i32],
-) -> anyhow::Result<std::process::Output> {
+) -> Result<String, RunCommandError> {
     let out = expr
         .stderr_to_stdout()
         .stdout_capture()
@@ -81,24 +96,20 @@ fn run_expr(
         .run();
     match &out {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            anyhow::bail!(
-                "Executable `{}` not found. Is it installed and present in the PATH?",
-                command
-            );
+            return Err(RunCommandError::NotFound(command.into()));
         }
         _ => {}
     }
-    let out = out?;
+    let out = out.map_err(RunCommandError::Other)?;
+    let stdout = String::from_utf8(out.stdout).map_err(|_| RunCommandError::Utf8)?;
     match out.status.code() {
-        Some(code) => {
-            if !success_statuses.contains(&code) {
-                let stdout = String::from_utf8(out.stdout)?;
-                anyhow::bail!(stdout);
-            }
-        }
-        None => anyhow::bail!("Process was terminated by a signal"),
+        Some(code) if !success_statuses.contains(&code) => Err(RunCommandError::StatusCode {
+            output: stdout,
+            code,
+        }),
+        None => Err(RunCommandError::Signal),
+        _ => Ok(stdout),
     }
-    Ok(out)
 }
 impl Check {
     pub fn name(&self) -> &str {
@@ -125,12 +136,11 @@ impl Check {
             }
             Check::GitClean => {
                 anyhow::ensure!(!fix, "No automatic fix available");
-                let cmd = run_expr(
+                let stdout = run_expr(
                     "git",
                     duct::cmd!("git", "status", "--porcelain", "-uno").dir(repository),
                     &[0],
                 )?;
-                let stdout = String::from_utf8(cmd.stdout)?;
                 if !stdout.is_empty() {
                     anyhow::bail!("Repository is dirty:\n{}", stdout);
                 }
@@ -140,27 +150,22 @@ impl Check {
                 anyhow::ensure!(!fix, "No automatic fix available");
                 run_expr("git", duct::cmd!("git", "fetch").dir(repository), &[0])?;
                 let rev_parse = |rev: &str| -> anyhow::Result<String> {
-                    Ok(String::from_utf8(
-                        run_expr(
-                            "git",
-                            duct::cmd!("git", "rev-parse", rev).dir(repository),
-                            &[0],
-                        )?
-                        .stdout,
+                    Ok(run_expr(
+                        "git",
+                        duct::cmd!("git", "rev-parse", rev).dir(repository),
+                        &[0],
                     )?
                     .trim()
                     .to_owned())
                 };
                 let origin = rev_parse("origin/master")?;
                 let head = rev_parse("HEAD")?;
-                let common_ancestor = String::from_utf8(
-                    run_expr(
-                        "git",
-                        duct::cmd!("git", "merge-base", &origin, &head).dir(repository),
-                        &[0],
-                    )?
-                    .stdout,
+                let common_ancestor = run_expr(
+                    "git",
+                    duct::cmd!("git", "merge-base", &origin, &head).dir(repository),
+                    &[0],
                 )?;
+
                 anyhow::ensure!(
                     common_ancestor.trim() == origin,
                     "The commit {} is not rebased on origin/master ({})",
@@ -177,6 +182,7 @@ impl Check {
                 version,
                 version_command,
                 name,
+                output,
             } => {
                 let mut dir = repository.to_owned();
                 if let Some(folder) = folder {
@@ -189,8 +195,7 @@ impl Check {
                     }
                     (Some(version_req), Some(version_command)) => {
                         // Check version
-                        let out = run_command(version_command, &dir)?.stdout;
-                        let out = String::from_utf8(out)?;
+                        let out = run_command(version_command, &dir)?;
                         let version = out
                             .trim()
                             .split(' ')
@@ -207,14 +212,28 @@ impl Check {
                     _ => {}
                 }
 
-                let command = if fix {
-                    fix_command.as_ref().with_context(|| {
+                if fix {
+                    let command = fix_command.as_ref().with_context(|| {
                         format!("No automatic fix available for {}", self.name())
-                    })?
+                    })?;
+                    run_command(command, &dir)?;
                 } else {
-                    command
-                };
-                run_command(command, &dir)?;
+                    let out = run_command(command, &dir);
+                    if let Some(output_path) = output {
+                        // Write to output file
+                        match &out {
+                            Ok(stdout) => {
+                                std::fs::write(output_path, stdout)?;
+                            }
+                            Err(RunCommandError::StatusCode { output, .. }) => {
+                                std::fs::write(output_path, output)?;
+                            }
+                            _ => {}
+                        }
+                    }
+                    out?;
+                }
+
                 Ok(())
             }
         }
@@ -229,7 +248,7 @@ pub struct Config {
 
 impl Config {
     pub fn load(path: &Path) -> anyhow::Result<Self> {
-        let config = std::fs::read_to_string(&path)
+        let config = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to open configuration at {:?}", path))?;
 
         let config: Config =
