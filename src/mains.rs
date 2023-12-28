@@ -25,7 +25,7 @@ pub struct Flags {
     /// Repository root. If not provided, deduced from the current directory.
     repository: Option<PathBuf>,
     /// Configuration path relative to repository root
-    #[clap(default_value = "checkalot.yaml")]
+    #[clap(long, default_value = "checkalot.yaml")]
     config: PathBuf,
     /// Tries to fix errors
     #[clap(long)]
@@ -76,7 +76,10 @@ fn run_checks(args: &Flags) -> anyhow::Result<bool> {
             }
             Err(e) => {
                 println!("❌ {:.2} s", start_check.elapsed().as_secs_f32());
-                println!("{}", e);
+                println!("{}", e.to_string().red());
+                if let CheckError::RunCommand(RunCommandError::StatusCode { output, .. }) = e {
+                    println!("{}", output);
+                }
                 anyhow::bail!(
                     "The check '{}' has failed. Try running with --fix.",
                     check.name()

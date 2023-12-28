@@ -87,7 +87,3 @@ font = wezterm.font_with_fallback({"JetBrains Mono", "Noto Emoji"})
   - https://crates.io/crates/cargo-hakari
   - https://prettier.io/
   - https://github.com/cpg314/cargo-group-imports
-
-## TODOs
-
-- Type the errors (instead of `anyhow`), so that we can distinguish stdout/stderr in commands from other errors.

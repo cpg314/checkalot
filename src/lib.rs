@@ -61,7 +61,7 @@ pub enum Check {
     },
 }
 #[derive(thiserror::Error, Debug)]
-enum RunCommandError {
+pub enum RunCommandError {
     #[error("Executable `{0}` not found. Is it installed and present in the PATH?")]
     NotFound(String),
     #[error("Command terminated with a failure status code {code}")]
@@ -72,6 +72,33 @@ enum RunCommandError {
     Utf8,
     #[error("Other execution error: {0}")]
     Other(std::io::Error),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum CheckError {
+    #[error(transparent)]
+    RunCommand(#[from] RunCommandError),
+    #[error("No automatic fix available")]
+    NoFix,
+    #[error("Execution folder {0:?} does not exist")]
+    ExecutionFolder(PathBuf),
+    #[error("Failed writing to output file: {0}")]
+    WriteOutput(std::io::Error),
+    // Versions
+    #[error("A `version_command` is required to check against `version`")]
+    MissingVersionCommand,
+    #[error("Version {version} does not meet requirement {version_req}")]
+    VersionReq {
+        version_req: semver::VersionReq,
+        version: semver::Version,
+    },
+    #[error("Failed to find a version in `{0}`")]
+    VersionFind(String),
+    // Build-in check errors
+    #[error("Repository is dirty")]
+    DirtyRepository,
+    #[error("The commit {local} is not rebased on origin/master ({origin})")]
+    NotRebased { local: String, origin: String },
 }
 
 fn run_command(command_spec: &CommandSpec, dir: &Path) -> Result<String, RunCommandError> {
@@ -120,36 +147,41 @@ impl Check {
             Check::Command { name, .. } => name,
         }
     }
-    pub fn execute(&self, repository: &Path, fix: bool) -> anyhow::Result<()> {
+    pub fn execute(&self, repository: &Path, fix: bool) -> Result<(), CheckError> {
         match self {
             Check::Version {
                 version: version_req,
             } => {
-                let version = &semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
-                anyhow::ensure!(
-                    version_req.matches(version),
-                    "Version {} does not meet requirement {}",
-                    version,
-                    version_req
-                );
+                let version = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+
+                if !version_req.matches(&version) {
+                    return Err(CheckError::VersionReq {
+                        version,
+                        version_req: version_req.clone(),
+                    });
+                }
                 Ok(())
             }
             Check::GitClean => {
-                anyhow::ensure!(!fix, "No automatic fix available");
+                if fix {
+                    return Err(CheckError::NoFix);
+                }
                 let stdout = run_expr(
                     "git",
                     duct::cmd!("git", "status", "--porcelain", "-uno").dir(repository),
                     &[0],
                 )?;
                 if !stdout.is_empty() {
-                    anyhow::bail!("Repository is dirty:\n{}", stdout);
+                    return Err(CheckError::DirtyRepository);
                 }
                 Ok(())
             }
             Check::GitRebased => {
-                anyhow::ensure!(!fix, "No automatic fix available");
+                if fix {
+                    return Err(CheckError::NoFix);
+                }
                 run_expr("git", duct::cmd!("git", "fetch").dir(repository), &[0])?;
-                let rev_parse = |rev: &str| -> anyhow::Result<String> {
+                let rev_parse = |rev: &str| -> Result<String, RunCommandError> {
                     Ok(run_expr(
                         "git",
                         duct::cmd!("git", "rev-parse", rev).dir(repository),
@@ -166,12 +198,12 @@ impl Check {
                     &[0],
                 )?;
 
-                anyhow::ensure!(
-                    common_ancestor.trim() == origin,
-                    "The commit {} is not rebased on origin/master ({})",
-                    head,
-                    origin
-                );
+                if common_ancestor.trim() != origin {
+                    return Err(CheckError::NotRebased {
+                        local: head,
+                        origin,
+                    });
+                }
 
                 Ok(())
             }
@@ -181,17 +213,19 @@ impl Check {
                 fix_command,
                 version,
                 version_command,
-                name,
                 output,
+                ..
             } => {
                 let mut dir = repository.to_owned();
                 if let Some(folder) = folder {
                     dir = dir.join(folder);
                 }
-                anyhow::ensure!(dir.exists(), "Execution folder {:?} does not exist", dir);
+                if !dir.exists() {
+                    return Err(CheckError::ExecutionFolder(dir));
+                }
                 match (version, version_command) {
                     (Some(_), None) => {
-                        anyhow::bail!("A `version_command` is required to check against `version`")
+                        return Err(CheckError::MissingVersionCommand);
                     }
                     (Some(version_req), Some(version_command)) => {
                         // Check version
@@ -200,22 +234,20 @@ impl Check {
                             .trim()
                             .split(' ')
                             .find_map(|s| semver::Version::parse(s).ok())
-                            .with_context(|| format!("Failed to find a version in {}", out))?;
-                        anyhow::ensure!(
-                            version_req.matches(&version),
-                            "Version {} of {} does not match requirement {}",
-                            version,
-                            name,
-                            version_req
-                        );
+                            .ok_or_else(|| CheckError::VersionFind(out))?;
+
+                        if !version_req.matches(&version) {
+                            return Err(CheckError::VersionReq {
+                                version_req: version_req.clone(),
+                                version,
+                            });
+                        }
                     }
                     _ => {}
                 }
 
                 if fix {
-                    let command = fix_command.as_ref().with_context(|| {
-                        format!("No automatic fix available for {}", self.name())
-                    })?;
+                    let command = fix_command.as_ref().ok_or(CheckError::NoFix)?;
                     run_command(command, &dir)?;
                 } else {
                     let out = run_command(command, &dir);
@@ -223,10 +255,12 @@ impl Check {
                         // Write to output file
                         match &out {
                             Ok(stdout) => {
-                                std::fs::write(output_path, stdout)?;
+                                std::fs::write(output_path, stdout)
+                                    .map_err(CheckError::WriteOutput)?;
                             }
                             Err(RunCommandError::StatusCode { output, .. }) => {
-                                std::fs::write(output_path, output)?;
+                                std::fs::write(output_path, output)
+                                    .map_err(CheckError::WriteOutput)?;
                             }
                             _ => {}
                         }
