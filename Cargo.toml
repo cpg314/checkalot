@@ -11,12 +11,22 @@ path = "src/checkalot.rs"
 name = "cargo-checkalot"
 path = "src/cargo-checkalot.rs"
 
+[[bin]]
+name = "checkalot-bundle"
+path = "src/bundle.rs"
+
 [dependencies]
 anyhow = "1.0.75"
 clap = { version = "4.4.10", features = ["derive"] }
 colored = "2.0.4"
+dirs = "5.0.1"
 duct = "0.13.6"
+flate2 = "1.0.28"
 semver = { version = "1.0.20", features = ["serde"] }
 serde = { version = "1.0.193", features = ["derive"] }
 serde_yaml = "0.9.27"
+tar = "0.4.40"
+tempfile = "3.9.0"
 thiserror = "1.0.52"
+ureq = "2.9.1"
+walkdir = "2.4.0"

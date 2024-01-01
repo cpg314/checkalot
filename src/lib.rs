@@ -1,65 +1,9 @@
+pub mod config;
 pub mod mains;
+use config::*;
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
-
-#[derive(serde::Deserialize, serde::Serialize, Debug)]
-#[serde(untagged)]
-pub enum CommandSpec {
-    Simple(String),
-    Complex {
-        command: String,
-        success_statuses: Vec<i32>,
-    },
-}
-impl CommandSpec {
-    fn command(&self) -> &String {
-        match self {
-            CommandSpec::Simple(command) => command,
-            CommandSpec::Complex { command, .. } => command,
-        }
-    }
-    fn success_statuses(&self) -> &[i32] {
-        match self {
-            CommandSpec::Simple(_) => &[0],
-            CommandSpec::Complex {
-                success_statuses: ok_returns,
-                ..
-            } => ok_returns,
-        }
-    }
-}
-
-#[derive(serde::Deserialize, serde::Serialize, Debug)]
-#[serde(rename_all = "lowercase", tag = "type")]
-#[allow(clippy::large_enum_variant)]
-pub enum Check {
-    Version {
-        version: semver::VersionReq,
-    },
-    /// Checks if the repository is clean. Untracked files are ignored.
-    #[serde(rename = "git-is-clean")]
-    GitClean,
-    /// Check if the repository is rebased on origin/master.
-    #[serde(rename = "git-is-rebased")]
-    GitRebased,
-    Command {
-        name: String,
-        /// Command to execute; a status code of 0 denotes success.
-        command: CommandSpec,
-        /// Command to attempt to fix failures.
-        fix_command: Option<CommandSpec>,
-        /// Directory where the command should be executed. Repository root if left empty.
-        folder: Option<PathBuf>,
-        /// Command that produces a version number to be checked against `version`.
-        version_command: Option<CommandSpec>,
-        /// Semver requirement on the tool.
-        version: Option<semver::VersionReq>,
-        /// Save stderr and stdout at this location, overwriting if the file exists.
-        output: Option<PathBuf>,
-    },
-}
 #[derive(thiserror::Error, Debug)]
 pub enum RunCommandError {
     #[error("Executable `{0}` not found. Is it installed and present in the PATH?")]
@@ -103,15 +47,13 @@ pub enum CheckError {
 
 fn run_command(command_spec: &CommandSpec, dir: &Path) -> Result<String, RunCommandError> {
     let command: Vec<&str> = command_spec.command().split(' ').collect();
-    run_expr(
-        command[0],
-        duct::cmd(command[0], command.into_iter().skip(1)).dir(dir),
-        command_spec.success_statuses(),
-    )
+    let command_name = command[0];
+    let cmd = duct::cmd(command_name, command.into_iter().skip(1)).dir(dir);
+    run_expr(command_name, cmd, command_spec.success_statuses())
 }
 
 fn run_expr(
-    command: &str,
+    command_name: &str,
     expr: duct::Expression,
     success_statuses: &[i32],
 ) -> Result<String, RunCommandError> {
@@ -123,7 +65,7 @@ fn run_expr(
         .run();
     match &out {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(RunCommandError::NotFound(command.into()));
+            return Err(RunCommandError::NotFound(command_name.into()));
         }
         _ => {}
     }
@@ -274,20 +216,10 @@ impl Check {
     }
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Debug)]
-pub struct Config {
-    #[serde(default)]
-    pub checks: Vec<Check>,
-}
-
-impl Config {
-    pub fn load(path: &Path) -> anyhow::Result<Self> {
-        let config = std::fs::read_to_string(path)
-            .with_context(|| format!("Failed to open configuration at {:?}", path))?;
-
-        let config: Config =
-            serde_yaml::from_str(&config).context("Failed to deserialize configuration")?;
-
-        Ok(config)
-    }
+pub fn download_tar_gz(
+    url: &str,
+) -> anyhow::Result<tar::Archive<flate2::read::GzDecoder<Box<dyn std::io::Read + Send + Sync>>>> {
+    let reader = ureq::get(url).call()?.into_reader();
+    let reader = flate2::read::GzDecoder::new(reader);
+    Ok(tar::Archive::new(reader))
 }

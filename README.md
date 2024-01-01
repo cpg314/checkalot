@@ -54,6 +54,33 @@ All checks are then rerun in order. This is important, as fixes from one command
 
 ![Screenshot](fix.png)
 
+### Bundling dependencies
+
+It might be burdensome for users to have to manually install and keep up-to-date all commands in a `checkalot` pipeline.
+
+The `checkalot-bundle` tool takes a YAML configuration of the form
+
+```yaml
+- name: cargo-group-imports
+  version: 0.1.3
+  url: https://github.com/cpg314/cargo-group-imports/releases/download/v0.1.3/cargo-group-imports-0.1.3-x86_64-unknown-linux-gnu.tar.gz
+  license: licenses.html
+  files:
+    - cargo-group-imports
+- ...
+```
+
+and produces a `.tar.gz` bundle that can be served by HTTPs and referenced by the `checkalot.yaml` configuration:
+
+```yaml
+bundle:
+  url: https://.../bundle-v1.tar.gz
+```
+
+The contents will be extracted to `~/.cache/checkalot/{bundle}`, which is added to the `PATH` during the execution of commands.
+
+Note: Currently, the bundle is uniquely identified by its URL. Therefore, the URL must be changed (e.g. with a version number) for the contents to be redownloaded.
+
 ### Avoiding rebuilds
 
 If you execute `clippy` outside of `checkalot`, make sure it is run with exactly the same arguments, to avoid recompilations between invocations from different locations. This includes for example the `-D warnings` parameter.
