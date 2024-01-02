@@ -1,8 +1,10 @@
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -57,6 +59,29 @@ impl Config {
             .context("Failed to download bundle")?;
 
         Ok(config)
+    }
+
+    pub fn filter(&mut self, only: HashSet<&str>, skip: HashSet<&str>) -> anyhow::Result<()> {
+        let checks: HashSet<_> = self.checks.iter().map(Check::name).collect();
+        anyhow::ensure!(
+            skip.is_subset(&checks),
+            "The --skip checks are not a subset of available checks {:?}",
+            checks
+        );
+        anyhow::ensure!(
+            only.is_subset(&checks),
+            "The --only checks are not a subset of available checks {:?}",
+            checks
+        );
+        if !only.is_empty() {
+            println!("{} {:?}", "Executing only".yellow(), only);
+            self.checks.retain(|c| only.contains(&c.name()));
+        }
+        if !skip.is_empty() {
+            self.checks.retain(|c| !skip.contains(&c.name()));
+            println!(" {} {:?}", "Skipping".yellow(), skip);
+        }
+        Ok(())
     }
 }
 

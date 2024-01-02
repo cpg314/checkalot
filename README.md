@@ -10,11 +10,14 @@ This lightweight binary runs a configurable series of commands that can perform 
 Usage: checkalot [OPTIONS] [REPOSITORY]
 
 Arguments:
-  [REPOSITORY]  [default: deduced from current directory]
+  [REPOSITORY]  Repository root. If not provided, deduced from the current directory
 
 Options:
-      --fix   Tries to fix errors
-  -h, --help  Print help
+      --skip <SKIP>      Skip these checks
+      --only <ONLY>      Only perform these checks
+      --config <CONFIG>  Configuration path relative to repository root [default: checkalot.yaml]
+      --fix              Tries to fix errors
+  -h, --help             Print help
 ```
 
 The repository should contain a `checkalot.yaml` configuration file at its root.

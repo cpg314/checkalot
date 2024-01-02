@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -24,6 +25,12 @@ fn find_repository() -> anyhow::Result<PathBuf> {
 pub struct Flags {
     /// Repository root. If not provided, deduced from the current directory.
     repository: Option<PathBuf>,
+    /// Skip these checks
+    #[clap(long, value_delimiter = ',')]
+    skip: Vec<String>,
+    /// Only perform these checks
+    #[clap(long, value_delimiter = ',', conflicts_with = "skip")]
+    only: Vec<String>,
     /// Configuration path relative to repository root
     #[clap(long, default_value = "checkalot.yaml")]
     config: PathBuf,
@@ -39,15 +46,8 @@ pub fn main(args: Flags) -> anyhow::Result<()> {
     Ok(())
 }
 /// Returns `true` if at least one fix ran
-fn run_checks(args: &Flags) -> anyhow::Result<bool> {
+fn run_checks(config: &Config, repository: &Path, fix: bool) -> anyhow::Result<bool> {
     let mut stdout = std::io::stdout();
-    let repository = if let Some(repository) = args.repository.clone() {
-        repository
-    } else {
-        find_repository()?
-    };
-
-    let config = Config::load(&repository.join(&args.config))?;
     let n_checks = config.checks.len();
     let start = std::time::Instant::now();
 
@@ -62,11 +62,11 @@ fn run_checks(args: &Flags) -> anyhow::Result<bool> {
         print!("{}Executing {:<20} ", header, check.name());
         stdout.flush()?;
 
-        match check.execute(&repository, false) {
-            Err(_) if args.fix => {
+        match check.execute(repository, false) {
+            Err(_) if fix => {
                 print!("🟠 ");
                 stdout.flush()?;
-                if let Err(e) = check.execute(&repository, true) {
+                if let Err(e) = check.execute(repository, true) {
                     println!("\n{}", e);
                     anyhow::bail!("Fixing {} failed", check.name());
                 }
@@ -99,15 +99,26 @@ fn run_checks(args: &Flags) -> anyhow::Result<bool> {
     }
     Ok(ran_fix)
 }
-fn main_impl(mut args: Flags) -> anyhow::Result<()> {
+fn main_impl(args: Flags) -> anyhow::Result<()> {
     println!("{} {}", "checkalot".blue(), env!("CARGO_PKG_VERSION"));
 
-    let ran_fix = run_checks(&args)?;
+    let repository = if let Some(repository) = args.repository.clone() {
+        repository
+    } else {
+        find_repository()?
+    };
+
+    let mut config = Config::load(&repository.join(&args.config))?;
+
+    let skip: HashSet<_> = args.skip.iter().map(String::as_str).collect();
+    let only: HashSet<_> = args.only.iter().map(String::as_str).collect();
+    config.filter(only, skip)?;
+
+    let ran_fix = run_checks(&config, &repository, false)?;
 
     if args.fix && ran_fix {
         println!("\nRunning all checks again to ensure that fixes were successful.\n",);
-        args.fix = false;
-        run_checks(&args)?;
+        run_checks(&config, &repository, true)?;
     }
     Ok(())
 }
