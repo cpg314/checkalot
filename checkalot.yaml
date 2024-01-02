@@ -1,6 +1,7 @@
 # Use checkalot-bundle to create a bundle packaging binaries
 # bundle:
-#   url: https://localhost:8080/bundle-v1.tar.gz
+#   url: http://localhost:8080/bundle-v1.tar.gz
+#   sha256: 3485d055aa8af8bdd85d7d660faa6572cb3f7411b1ca9cd57cc7c743e79340b4
 checks:
   - type: version
     version: ">=0.1.1"

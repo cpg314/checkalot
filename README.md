@@ -78,6 +78,7 @@ and produces a `.tar.gz` bundle that can be served by HTTPs and referenced by th
 ```yaml
 bundle:
   url: https://.../bundle-v1.tar.gz
+  checksum: 056e77264767271fe3b267f63296576366fb7115a7125df11953c41c20a46756
 ```
 
 The contents will be extracted to `~/.cache/checkalot/{bundle}`, which is added to the `PATH` during the execution of commands.

@@ -1,6 +1,5 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
-use std::hash::{Hash, Hasher};
+use std::io::Seek;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -17,6 +16,7 @@ pub struct Config {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct BundleConfig {
     url: String,
+    sha256: String,
     #[serde(skip)]
     path: PathBuf,
 }
@@ -24,18 +24,29 @@ pub struct BundleConfig {
 impl Config {
     pub fn download_bundle(&mut self) -> anyhow::Result<()> {
         if let Some(config) = &mut self.bundle {
-            let mut checksum = DefaultHasher::new();
-            config.url.hash(&mut checksum);
-            let checksum = checksum.finish();
             config.path = dirs::cache_dir()
                 .context("Failed to find cache dir")?
                 .join("checkalot")
-                .join(checksum.to_string());
+                .join(&config.sha256);
             std::fs::create_dir_all(&config.path)?;
             let cache_done = config.path.join("done");
             if !cache_done.exists() {
                 println!("Downloading bundle from {}...", config.url);
-                let mut tar = crate::download_tar_gz(&config.url)?;
+
+                let mut reader = ureq::get(&config.url).call()?.into_reader();
+                let mut tempfile = tempfile::tempfile()?;
+                std::io::copy(&mut reader, &mut tempfile)?;
+                tempfile.seek(std::io::SeekFrom::Start(0))?;
+                let sha256 = crate::sha256(&mut tempfile)?;
+                anyhow::ensure!(
+                    config.sha256 == sha256,
+                    "Mismatching checksum: got {}, wanted {}",
+                    sha256,
+                    config.sha256
+                );
+                tempfile.seek(std::io::SeekFrom::Start(0))?;
+                let reader = flate2::read::GzDecoder::new(tempfile);
+                let mut tar = tar::Archive::new(reader);
                 tar.unpack(&config.path)?;
                 std::fs::write(cache_done, "")?;
             } else {

@@ -31,7 +31,8 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
 
     let config: Vec<ConfigEntry> = serde_yaml::from_str(&std::fs::read_to_string(args.config)?)?;
 
-    let tar_out = std::fs::File::create(args.output.join(args.filename).with_extension("tar.gz"))?;
+    let output = args.output.join(args.filename).with_extension("tar.gz");
+    let tar_out = std::fs::File::create(&output)?;
     let tar_out = flate2::write::GzEncoder::new(tar_out, flate2::Compression::default());
     let mut tar_out = tar::Builder::new(tar_out);
 
@@ -46,7 +47,9 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
         if !entry.files.iter().all(|e| output.join(e).exists()) {
             println!("\tDownloading {} {}", entry.name, entry.version);
             entry.url = entry.url.replace("${VERSION}", &entry.version.to_string());
-            let mut tar = checkalot::download_tar_gz(&entry.url)?;
+            let reader = ureq::get(&entry.url).call()?.into_reader();
+            let reader = flate2::read::GzDecoder::new(reader);
+            let mut tar = tar::Archive::new(reader);
             let tar_out = tempfile::tempdir()?;
             tar.unpack(&tar_out)?;
             let files_found: Vec<_> = walkdir::WalkDir::new(&tar_out)
@@ -76,8 +79,13 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
         }
     }
     tar_out.finish()?;
+    drop(tar_out);
 
-    println!("Done",);
+    println!(
+        "Done, {:?} checksum: {}",
+        output,
+        checkalot::sha256(std::fs::File::open(&output)?)?
+    );
 
     Ok(())
 }

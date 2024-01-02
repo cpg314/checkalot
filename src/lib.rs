@@ -4,6 +4,8 @@ use config::*;
 
 use std::path::{Path, PathBuf};
 
+use sha2::Digest;
+
 #[derive(thiserror::Error, Debug)]
 pub enum RunCommandError {
     #[error("Executable `{0}` not found. Is it installed and present in the PATH?")]
@@ -216,10 +218,8 @@ impl Check {
     }
 }
 
-pub fn download_tar_gz(
-    url: &str,
-) -> anyhow::Result<tar::Archive<flate2::read::GzDecoder<Box<dyn std::io::Read + Send + Sync>>>> {
-    let reader = ureq::get(url).call()?.into_reader();
-    let reader = flate2::read::GzDecoder::new(reader);
-    Ok(tar::Archive::new(reader))
+pub fn sha256(mut r: impl std::io::Read) -> anyhow::Result<String> {
+    let mut hasher = sha2::Sha256::new();
+    std::io::copy(&mut r, &mut hasher)?;
+    Ok(format!("{:x}", hasher.finalize()))
 }
