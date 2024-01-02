@@ -42,6 +42,7 @@ pub struct Flags {
 pub fn main(args: Flags) -> anyhow::Result<()> {
     if let Err(e) = main_impl(args) {
         println!("{}: {:?}", "Error".red(), e);
+        std::process::exit(1);
     }
     Ok(())
 }
