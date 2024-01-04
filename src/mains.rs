@@ -115,7 +115,7 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
     let only: HashSet<_> = args.only.iter().map(String::as_str).collect();
     config.filter(only, skip)?;
 
-    let ran_fix = run_checks(&config, &repository, false)?;
+    let ran_fix = run_checks(&config, &repository, args.fix)?;
 
     if args.fix && ran_fix {
         println!("\nRunning all checks again to ensure that fixes were successful.\n",);
