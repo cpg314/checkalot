@@ -119,7 +119,7 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
 
     if args.fix && ran_fix {
         println!("\nRunning all checks again to ensure that fixes were successful.\n",);
-        run_checks(&config, &repository, true)?;
+        run_checks(&config, &repository, false)?;
     }
     Ok(())
 }
