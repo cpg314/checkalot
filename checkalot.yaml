@@ -4,7 +4,7 @@
 #   sha256: 3485d055aa8af8bdd85d7d660faa6572cb3f7411b1ca9cd57cc7c743e79340b4
 checks:
   - type: version
-    version: ">=0.1.2"
+    version: ">=0.1.4"
 
   - type: git-is-clean
   - type: git-is-rebased
