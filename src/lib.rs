@@ -4,6 +4,7 @@ use config::*;
 
 use std::path::{Path, PathBuf};
 
+use colored::Colorize;
 use sha2::Digest;
 
 #[derive(thiserror::Error, Debug)]
@@ -47,6 +48,14 @@ pub enum CheckError {
     DirtyRepository,
     #[error("The commit {local} is not rebased on origin/master ({origin})")]
     NotRebased { local: String, origin: String },
+}
+impl CheckError {
+    fn print(&self) {
+        println!("\n{}", self.to_string().red());
+        if let CheckError::RunCommand(RunCommandError::StatusCode { output, .. }) = &self {
+            println!("{}", output);
+        }
+    }
 }
 
 fn run_command(command_spec: &CommandSpec, dir: &Path) -> Result<String, RunCommandError> {

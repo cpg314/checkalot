@@ -68,7 +68,7 @@ fn run_checks(config: &Config, repository: &Path, fix: bool) -> anyhow::Result<b
                 print!("🟠 ");
                 stdout.flush()?;
                 if let Err(e) = check.execute(repository, true) {
-                    println!("\n{}", e);
+                    e.print();
                     anyhow::bail!("Fixing {} failed", check.name());
                 }
                 ran_fix = true;
@@ -77,10 +77,7 @@ fn run_checks(config: &Config, repository: &Path, fix: bool) -> anyhow::Result<b
             }
             Err(e) => {
                 println!("❌ {:.2} s", start_check.elapsed().as_secs_f32());
-                println!("{}", e.to_string().red());
-                if let CheckError::RunCommand(RunCommandError::StatusCode { output, .. }) = e {
-                    println!("{}", output);
-                }
+                e.print();
                 anyhow::bail!(
                     "The check '{}' has failed. Try running with --fix.",
                     check.name()
