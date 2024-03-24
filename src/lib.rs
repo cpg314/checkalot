@@ -16,6 +16,8 @@ pub enum RunCommandError {
     Signal,
     #[error("Command produced non-UTF-8 output")]
     Utf8,
+    #[error("Could not parse command: {0}")]
+    Split(#[from] shell_words::ParseError),
     #[error("Other execution error: {0}")]
     Other(std::io::Error),
 }
@@ -48,10 +50,10 @@ pub enum CheckError {
 }
 
 fn run_command(command_spec: &CommandSpec, dir: &Path) -> Result<String, RunCommandError> {
-    let command: Vec<&str> = command_spec.command().split(' ').collect();
-    let command_name = command[0];
-    let cmd = duct::cmd(command_name, command.into_iter().skip(1)).dir(dir);
-    run_expr(command_name, cmd, command_spec.success_statuses())
+    let command = shell_words::split(command_spec.command())?;
+    let command_name = command[0].clone();
+    let cmd = duct::cmd(&command_name, command.into_iter().skip(1)).dir(dir);
+    run_expr(&command_name, cmd, command_spec.success_statuses())
 }
 
 fn run_expr(
