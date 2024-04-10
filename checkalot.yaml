@@ -12,7 +12,6 @@ checks:
   - type: command
     name: group-imports
     command: cargo group-imports
-    folder: rust
     version: ">=0.1.3"
     version_command: cargo group-imports --version
     fix_command: cargo group-imports --fix
@@ -27,7 +26,6 @@ checks:
   - type: command
     name: hakari-deps
     command: cargo hakari manage-deps --dry-run
-    folder: rust
     version: ">=0.9"
     version_command: cargo hakari --version
     fix_command: cargo hakari manage-deps
@@ -35,7 +33,6 @@ checks:
   - type: command
     name: machete
     command: cargo-machete
-    folder: rust
     fix_command:
       command: cargo-machete --fix
       success_statuses:
@@ -45,20 +42,17 @@ checks:
   - type: command
     name: deny
     command: cargo deny --offline check licenses bans sources --hide-inclusion-graph
-    folder: rust
     version: ">=0.14"
     version_command: cargo deny --version
 
   - type: command
     name: fmt
     command: cargo fmt --all -- --check
-    folder: rust
     fix_command: cargo fmt --all
 
   - type: command
     name: clippy
     command: cargo clippy --release --workspace --no-deps --benches --tests --all-features -- -D warnings
-    folder: rust
     fix_command: cargo clippy --release --workspace --no-deps --benches --tests --all-features --fix -- -D warnings
 
   - type: command

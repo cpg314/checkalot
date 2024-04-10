@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use clap::Parser;
 use colored::Colorize;
 use serde::Deserialize;
@@ -20,9 +21,12 @@ struct Flags {
 #[derive(Deserialize)]
 struct ConfigEntry {
     name: String,
-    license: Option<String>,
+    license: String,
     version: semver::Version,
-    url: String,
+    /// Can be plain-text files, .tar.gz or .zip archives
+    urls: Vec<String>,
+    /// Matches a filename name anywhere in the URLs
+    /// (at any level, to allow traversing possibly changing parent folders)
     files: HashSet<String>,
 }
 
@@ -40,19 +44,42 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
         println!("Processing {}", entry.name);
         let output = args.output.join(&entry.name);
         std::fs::create_dir_all(&output)?;
-        if let Some(license) = &entry.license {
-            entry.files.insert(license.clone());
-        }
-
+        entry.files.insert(entry.license.clone());
         if !entry.files.iter().all(|e| output.join(e).exists()) {
             println!("\tDownloading {} {}", entry.name, entry.version);
-            entry.url = entry.url.replace("${VERSION}", &entry.version.to_string());
-            let reader = ureq::get(&entry.url).call()?.into_reader();
-            let reader = flate2::read::GzDecoder::new(reader);
-            let mut tar = tar::Archive::new(reader);
-            let tar_out = tempfile::tempdir()?;
-            tar.unpack(&tar_out)?;
-            let files_found: Vec<_> = walkdir::WalkDir::new(&tar_out)
+            let archive_out = tempfile::tempdir()?;
+            for mut url in entry.urls {
+                url = url.replace("${VERSION}", &entry.version.to_string());
+                let resp = ureq::get(&url).call()?;
+                let plain = resp
+                    .header("content-type")
+                    .map_or(false, |t| t.starts_with("text/plain"));
+                let mut reader = resp.into_reader();
+
+                if url.ends_with(".tar.gz") {
+                    let reader = flate2::read::GzDecoder::new(reader);
+                    let mut tar = tar::Archive::new(reader);
+                    tar.unpack(&archive_out)?;
+                } else if url.ends_with(".zip") {
+                    let mut data = vec![];
+                    reader.read_to_end(&mut data)?;
+                    let reader = std::io::Cursor::new(data);
+                    let mut zip = zip::ZipArchive::new(reader)?;
+                    zip.extract(&archive_out)?;
+                } else if plain {
+                    let mut data = vec![];
+                    reader.read_to_end(&mut data)?;
+                    std::fs::write(
+                        archive_out
+                            .path()
+                            .join(Path::new(&url).file_name().context("Invalid URL")?),
+                        data,
+                    )?;
+                } else {
+                    anyhow::bail!("Unsupported archive extension for {}", url)
+                }
+            }
+            let files_found: Vec<_> = walkdir::WalkDir::new(&archive_out)
                 .into_iter()
                 .filter_map(Result::ok)
                 .filter(|e| entry.files.contains(e.file_name().to_str().unwrap()))
@@ -66,9 +93,11 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
             for f in files_found {
                 std::fs::copy(f.path(), output.join(f.file_name()))?;
             }
+        } else {
+            println!("\tAll files already present",);
         }
         for f in entry.files {
-            if entry.license.as_ref().map_or(false, |l| &f == l) {
+            if f == entry.license {
                 tar_out.append_path_with_name(
                     output.join(&f),
                     Path::new("licenses").join(&entry.name),
