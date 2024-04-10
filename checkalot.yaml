@@ -6,7 +6,7 @@ checks:
   - type: version
     version: ">=0.1.4"
 
-  - type: git-is-clean
+  # - type: git-is-clean
   - type: git-is-rebased
 
   - type: command
@@ -16,19 +16,20 @@ checks:
     version_command: cargo group-imports --version
     fix_command: cargo group-imports --fix
 
-  - type: command
-    name: hakari
-    command: cargo hakari generate --diff
-    version: ">=0.9"
-    version_command: cargo hakari --version
-    fix_command: cargo hakari generate
+  # Hakari, for use in workspaces
+  # - type: command
+  #   name: hakari
+  #   command: cargo hakari generate --diff
+  #   version: ">=0.9"
+  #   version_command: cargo hakari --version
+  #   fix_command: cargo hakari generate
 
-  - type: command
-    name: hakari-deps
-    command: cargo hakari manage-deps --dry-run
-    version: ">=0.9"
-    version_command: cargo hakari --version
-    fix_command: cargo hakari manage-deps
+  # - type: command
+  #   name: hakari-deps
+  #   command: cargo hakari manage-deps --dry-run
+  #   version: ">=0.9"
+  #   version_command: cargo hakari --version
+  #   fix_command: cargo hakari manage-deps
 
   - type: command
     name: machete
@@ -57,7 +58,7 @@ checks:
 
   - type: command
     name: prettier
-    command: prettier --check docs
-    fix_command: prettier docs
+    command: prettier --check README.md
+    fix_command: prettier README.md
     version: ">=3.1.1"
     version_command: prettier --version
