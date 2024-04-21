@@ -26,7 +26,7 @@ The repository should contain a `checkalot.yaml` configuration file at its root.
 checks:
   # Built-in command (self version check)
   - type: version
-    version: ">=0.1.2"
+    version: ">=0.1.6"
   # Built-in command
   - type: git-is-clean
   # Built-in command
@@ -94,10 +94,12 @@ If needed, set `CARGO_LOG=cargo::core::compiler::fingerprint=info` to understand
 ## Installation
 
 ```
-$ cargo install --git https://github.com/cpg314/checkalot --tag v0.1.4
+$ cargo install --git https://github.com/cpg314/checkalot --tag v0.1.6
 ```
 
 This will install both `checkalot` and `cargo-checkalot`, the latter being usable as a cargo subcommand (`cargo checkalot`).
+
+Alternatively, see the pre-compiled packages in the [Releases](https://github.com/cpg314/checkalot/releases) page.
 
 ### Emojis
 
