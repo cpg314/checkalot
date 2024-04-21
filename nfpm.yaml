@@ -1,0 +1,21 @@
+name: "checkalot"
+arch: "amd64"
+platform: "linux"
+version: "${CARGO_MAKE_PROJECT_VERSION}"
+release: "${RELEASE}"
+section: "default"
+priority: "extra"
+provides:
+  - checkalot
+  - cargo-checkalot
+description: "Run a series of check commands on a repository."
+vendor: "cpg314"
+maintainer: "cpg314 <44120267+cpg314@users.noreply.github.com>"
+homepage: "https://github.com/cpg314/checkalot"
+contents:
+  - src: "./target-cross/$ARCH/release/checkalot"
+    dst: /usr/local/bin/checkalot
+    expand: true
+  - src: "./target-cross/$ARCH/release/cargo-checkalot"
+    dst: /usr/local/bin/cargo-checkalot
+    expand: true
