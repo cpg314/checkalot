@@ -51,9 +51,9 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
             for mut url in entry.urls {
                 url = url.replace("${VERSION}", &entry.version.to_string());
                 let resp = ureq::get(&url).call()?;
-                let plain = resp
-                    .header("content-type")
-                    .map_or(false, |t| t.starts_with("text/plain"));
+                let plain = resp.header("content-type").map_or(false, |t| {
+                    t.starts_with("text/plain") || t.starts_with("application/octet-stream")
+                });
                 let mut reader = resp.into_reader();
 
                 if url.ends_with(".tar.gz") {
@@ -69,12 +69,11 @@ fn main_impl(args: Flags) -> anyhow::Result<()> {
                 } else if plain {
                     let mut data = vec![];
                     reader.read_to_end(&mut data)?;
-                    std::fs::write(
-                        archive_out
-                            .path()
-                            .join(Path::new(&url).file_name().context("Invalid URL")?),
-                        data,
-                    )?;
+                    let filename = archive_out
+                        .path()
+                        .join(Path::new(&url).file_name().context("Invalid URL")?);
+                    std::fs::write(&filename, data)?;
+                    duct::cmd!("chmod", "+x", filename).run()?;
                 } else {
                     anyhow::bail!("Unsupported archive extension for {}", url)
                 }
