@@ -33,9 +33,9 @@ checks:
 
   - type: command
     name: machete
-    command: cargo-machete
+    command: cargo-machete .
     fix_command:
-      command: cargo-machete --fix
+      command: cargo-machete . --fix
       success_statuses:
         - 0
         - 1
@@ -53,8 +53,8 @@ checks:
 
   - type: command
     name: clippy
-    command: cargo clippy --release --workspace --no-deps --benches --tests --all-features -- -D warnings
-    fix_command: cargo clippy --release --workspace --no-deps --benches --tests --all-features --fix -- -D warnings
+    command: cargo clippy --color always --release --workspace --no-deps --benches --tests --all-features -- -D warnings
+    fix_command: cargo clippy --color always --allow-dirty --allow-staged --release --workspace --no-deps --benches --tests --all-features --fix -- -D warnings
 
   - type: command
     name: prettier
