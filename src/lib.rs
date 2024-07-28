@@ -4,6 +4,7 @@ use config::*;
 
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use colored::Colorize;
 use sha2::Digest;
 
@@ -58,10 +59,56 @@ impl CheckError {
     }
 }
 
+mod toolchain {
+    use super::*;
+    pub const ENVVAR: &str = "RUSTUP_TOOLCHAIN";
+    pub struct Toolchain(pub String);
+    impl Toolchain {
+        pub fn from_str(data: &str) -> anyhow::Result<Self> {
+            let data: toml::Table = toml::from_str(data)?;
+            data.get("toolchain")
+                .and_then(|d| d.get("channel"))
+                .and_then(|d| d.as_str())
+                .context("Failed to find channel in rust-toolchain.toml")
+                .map(String::from)
+                .map(Self)
+        }
+        /// Parse from a rust-toolchain.toml
+        pub fn from_file(filename: &Path) -> anyhow::Result<Self> {
+            let data = std::fs::read_to_string(filename)?;
+            Self::from_str(&data)
+        }
+    }
+    #[test]
+    fn parse_toolchain() {
+        assert_eq!(
+            Toolchain::from_str(
+                "
+[toolchain]
+channel = \"1.75.0\"
+"
+            )
+            .unwrap()
+            .0,
+            "1.75.0"
+        );
+    }
+}
 fn run_command(command_spec: &CommandSpec, dir: &Path) -> Result<String, RunCommandError> {
     let command = shell_words::split(command_spec.command())?;
     let command_name = command[0].clone();
-    let cmd = duct::cmd(&command_name, command.into_iter().skip(1)).dir(dir);
+    let mut cmd = duct::cmd(&command_name, command.into_iter().skip(1)).dir(dir);
+
+    // If a rust-toolchain.toml is present in the execution folder, we override RUSTC_TOOLCHAIN.
+    // This avoids the bug described in https://github.com/cpg314/checkalot/issues/2, when
+    // cargo checkalot is started from outside the Rust workspace root.
+    if std::env::var(toolchain::ENVVAR).is_ok() {
+        if let Ok(toolchain_toml) =
+            toolchain::Toolchain::from_file(&dir.join("rust-toolchain.toml"))
+        {
+            cmd = cmd.env(toolchain::ENVVAR, toolchain_toml.0);
+        }
+    }
     run_expr(&command_name, cmd, command_spec.success_statuses())
 }
 
