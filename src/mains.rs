@@ -22,6 +22,7 @@ fn find_repository() -> anyhow::Result<PathBuf> {
 }
 
 #[derive(Parser)]
+#[clap(version)]
 pub struct Flags {
     /// Repository root. If not provided, deduced from the current directory.
     repository: Option<PathBuf>,

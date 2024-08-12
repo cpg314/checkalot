@@ -7,6 +7,7 @@ use colored::Colorize;
 use serde::Deserialize;
 
 #[derive(Parser)]
+#[clap(version)]
 struct Flags {
     /// Configuration YAML. See `bundle.yaml` for an example.
     #[clap(long)]
