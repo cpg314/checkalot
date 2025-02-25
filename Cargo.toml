@@ -3,6 +3,9 @@ name = "checkalot"
 version = "0.1.7"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "Run a series of check commands on a repository (e.g. fmt/clippy/machete/deny)"
+repository = "https://github.com/cpg314/checkalot"
+categories = ["development-tools", "command-line-utilities"]
 
 [[bin]]
 name = "checkalot"
